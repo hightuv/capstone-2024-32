@@ -2,6 +2,7 @@ package com.example.WebOrder.controller;
 
 import com.example.WebOrder.dto.CategoryDto;
 import com.example.WebOrder.dto.ItemDto;
+import com.example.WebOrder.exception.status4xx.ForbiddenException;
 import com.example.WebOrder.service.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -45,7 +46,9 @@ public class ItemController {
     //메뉴 상세보기
     @GetMapping("/admin/item/detail/{itemId}")
     public String getMenuByOwner(@PathVariable("itemId") Long itemId, Model model, @RequestParam(name="page", defaultValue = "1") Integer page) {
-        model.addAttribute("itemInfo", itemService.getItemInfoById(itemId));
+        ItemDto itemInfo = itemService.getItemInfoById(itemId);
+        if (!loginService.getCurrentUserEntity().getId().equals(itemInfo.getAdminId())) throw new ForbiddenException("해당 메뉴를 볼 권한이 없습니다!");
+        model.addAttribute("itemInfo", itemInfo);
         model.addAttribute("reviewList", reviewService.getReviewsOfItem(itemId, PageRequest.of(page - 1, 10, Sort.Direction.DESC, "id")));
         model.addAttribute("totalPage", reviewService.getNumberOfPages(itemId));
         return "item/itemDetail";
@@ -62,7 +65,13 @@ public class ItemController {
 
     @PostMapping("/admin/item/create")
     public String createItem(ItemDto dto, @RequestPart(value = "image", required = false) MultipartFile image) throws IOException {
-        String fileName = s3UploadService.upload(image);
+        String fileName;
+        if (Objects.equals(image.getOriginalFilename(), "")) {
+            fileName = "";
+        }
+        else {
+            fileName = s3UploadService.upload(image);
+        }
         log.info("filename = " + fileName);
         itemService.createItem(loginService.getCurrentUserEntity().getId(), dto, fileName);
         return "redirect:/admin/item";
@@ -79,7 +88,9 @@ public class ItemController {
     @GetMapping("/admin/item/update/{itemId}")
     public String updateItemForm(@PathVariable("itemId") Long itemId, Model model){
         Long adminId = loginService.getCurrentUserEntity().getId();
-        model.addAttribute("itemInfo", itemService.getItemInfoById(itemId));
+        ItemDto itemInfo = itemService.getItemInfoById(itemId);
+        if (!itemInfo.getAdminId().equals(adminId)) throw new ForbiddenException("해당 메뉴에 대한 권한이 없습니다!");
+        model.addAttribute("itemInfo", itemInfo);
         model.addAttribute("categories", categoryService.getAllCategory(adminId));
         return "item/itemUpdateForm";
     }
